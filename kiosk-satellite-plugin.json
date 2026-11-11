@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "id": "rockchip-led-control",
   "name": "Rockchip LED Control",
-  "version": "0.3.0-dual.1",
+  "version": "0.3.0-dual.2",
   "minAndroidSdk": 24,
   "entryClass": "me.jxl.kiosk.plugins.rockchip.RockchipLedPlugin",
   "description": "Control the two RGB LED bars (left and right) of panels with a /dev/ledjni driver, such as the Allnet 13\" meeting-room tablet. Each bar has its own colour, brightness and effect, here or as a separate light in Home Assistant. Each bar shows one of seven colours at a time.",

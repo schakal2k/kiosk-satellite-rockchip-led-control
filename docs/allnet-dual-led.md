@@ -18,7 +18,9 @@ The app opens `/dev/ledjni` and calls `ioctl(fd, request, value)`.
 
 - `value` is the brightness, 0 to 15 (the demo's sliders have a maximum of 15).
 - `ioctl(fd, 0x99, 0)` switches the driver off.
-- In the demo, choosing a colour resets the other six sliders of that bar to 0, so one colour is shown per bar. This plugin does the same: it zeroes the six others first and writes the selected channel last.
+- A level of 0 is not off. Reported from the device: after writing 0 to all channels both bars stayed faintly white. Only `0x99` switches the LEDs fully off.
+- The demo selects one colour per bar and resets the other six sliders of that bar to 0. This plugin does not copy that, because of the point above. To change colour or switch a bar off it sends `0x99`, then writes only the channel that should be lit, for both bars. Level changes within the same colour are a single write.
+- `0x99` may affect both bars (not verified), so the other bar is always rewritten after it.
 
 ## Why the original plugin showed only blue
 
@@ -28,3 +30,4 @@ The upstream plugin writes requests 0xa1, 0xa2 and 0xa3 in turn as red, green an
 
 - Which bar is physically left or right is assumed (no suffix = right). Use "Swap left and right" if it is reversed.
 - Whether the colour channels are exclusive or additive was not tested on the device.
+- Whether `0x99` switches off one bar or both is not known; the plugin assumes it may be both.

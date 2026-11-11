@@ -76,6 +76,21 @@ public final class LedTest {
         assert LedMath.channel(new int[]{0,255,255})==3 && LedMath.channel(new int[]{255,0,255})==4 && LedMath.channel(new int[]{255,255,0})==5;
         assert LedMath.channel(new int[]{255,255,255})==6 && LedMath.channel(new int[]{0,0,0})==-1;
         assert LedMath.channel(new int[]{255,100,0})==0 && LedMath.channel(new int[]{255,128,0})==5 && LedMath.channel(new int[]{10,5,0})==5;
+        // Planner: a colour cannot be dimmed to off by writing 0, so darkening or recolouring uses the global off.
+        int[] off={-1,0};
+        java.util.List<int[]> ops=LedPlanner.plan(new int[][]{null,null},new int[][]{{2,15},off});
+        assert ops.size()==2 && ops.get(0).length==1 && Arrays.equals(ops.get(1),new int[]{0,2,15});   // unknown state: clear, rewrite lit bar
+        assert LedPlanner.plan(new int[][]{{2,15},off},new int[][]{{2,15},off}).isEmpty();               // nothing changed
+        ops=LedPlanner.plan(new int[][]{{2,15},{1,8}},new int[][]{{2,9},{1,8}});
+        assert ops.size()==1 && Arrays.equals(ops.get(0),new int[]{0,2,9});                              // level change: one write
+        ops=LedPlanner.plan(new int[][]{{2,15},off},new int[][]{{2,15},{4,6}});
+        assert ops.size()==1 && Arrays.equals(ops.get(0),new int[]{1,4,6});                              // dark bar on: other bar untouched
+        ops=LedPlanner.plan(new int[][]{{2,15},{1,8}},new int[][]{{0,15},{1,8}});
+        assert ops.size()==3 && ops.get(0).length==1 && Arrays.equals(ops.get(1),new int[]{0,0,15}) && Arrays.equals(ops.get(2),new int[]{1,1,8}); // recolour: clear, both rewritten
+        ops=LedPlanner.plan(new int[][]{{2,15},{1,8}},new int[][]{off,{1,8}});
+        assert ops.size()==2 && ops.get(0).length==1 && Arrays.equals(ops.get(1),new int[]{1,1,8});     // one bar off: clear, other rewritten
+        ops=LedPlanner.plan(new int[][]{{2,15},off},new int[][]{off,off});
+        assert ops.size()==1 && ops.get(0).length==1;                                                    // all off: only the global off
         assert LedTransport.Root.quote("a'b").equals("'a'\\''b'");
         Host host=new Host();RockchipLedPlugin plugin=new RockchipLedPlugin();
         plugin.start(host,defaults());waitFor(() -> host.state!=null&&host.leftState!=null);
@@ -125,6 +140,6 @@ public final class LedTest {
         viaRoot.stop();
         System.out.println("PASS: root fallback defers the probe to detect() rather than refusing the enable");
         for(Thread thread:Thread.getAllStackTraces().keySet())assert !thread.isAlive()||!thread.getName().equals("rockchip-led");
-        System.out.println("PASS: channel limits, color math, seven-colour palette, two independent bars, 19 rich effects, 24-effect entity cap, root argument quoting, simulation, HA commands, settings persistence, entity removal and clean worker shutdown.");
+        System.out.println("PASS: channel limits, color math, seven-colour palette, write planner, two independent bars, 19 rich effects, 24-effect entity cap, root argument quoting, simulation, HA commands, settings persistence, entity removal and clean worker shutdown.");
     }
 }

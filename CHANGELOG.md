@@ -1,11 +1,16 @@
 # Changelog
 
+## 0.3.0-dual.2
+
+- Fix: the bars stayed faintly white after switching off. A colour channel at level 0 is dimly lit, not off, so the plugin no longer writes zeros. Darkening or recolouring a bar now uses the vendor off request (0x99) and then writes only the channel that should be lit; the other bar is rewritten afterwards so it is not affected.
+- Level changes and switching a dark bar on remain single writes.
+
 ## 0.3.0-dual.1
 
 Dual-bar variant for the Allnet 174716 (RK3288) and similar panels. Not verified on hardware.
 
 - Two independent LED bars, each with its own power, color, brightness, effect and Home Assistant light.
-- New protocol layer matching the vendor demo app: per bar seven color channels (requests 0xa1-0xa7 and 0xb1-0xb7, level 0-15). The selected color is written last after the other six are zeroed.
+- New protocol layer matching the vendor demo app: per bar seven color channels (requests 0xa1-0xa7 and 0xb1-0xb7, level 0-15). The selected channel is written alone.
 - Colors are snapped to the seven-color palette; brightness uses 16 levels. Maximum channel drive is now capped at 15.
 - Added a setting to swap left and right.
 - Removed the old three-channel RGB write, which on this hardware left the bar stuck on blue.
