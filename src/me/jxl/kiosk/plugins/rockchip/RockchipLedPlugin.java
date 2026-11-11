@@ -8,7 +8,13 @@ import java.util.function.Supplier;
 import me.jxl.kiosk.plugins.KioskPlugin;
 import me.jxl.kiosk.plugins.PluginHost;
 
-/** Owns all hardware access, effects and root helper lifetime for this plugin. */
+/**
+ * Owns all hardware access, effects and root helper lifetime for this plugin.
+ *
+ * Dual-bar variant for panels with two LED bars (Allnet 174716): each bar is an
+ * independent "side" with its own power, colour, brightness, effect and Home
+ * Assistant light. A bar can show one of seven colours at a time (see LedMath.channel).
+ */
 public final class RockchipLedPlugin implements KioskPlugin {
     // The original five, still driven by LedMath.frame (unchanged), plus the
     // 19 ported from davidcoulson/kiosk-satellite's led_effects.dart — see
@@ -45,17 +51,27 @@ public final class RockchipLedPlugin implements KioskPlugin {
     private ScheduledExecutorService worker;
     private volatile LedTransport transport;
     private Map<String,Object> settings=new HashMap<>();
-    private long effectStart;
+    /** Highest level the hardware accepts per colour. */
+    private static final int MAX_LEVEL=15;
+    private static final Map<String,Object> SIDE_DEFAULTS=new HashMap<>();
+    static {
+        SIDE_DEFAULTS.put("powerLeft",false);SIDE_DEFAULTS.put("colorLeft","#00A8FF");
+        SIDE_DEFAULTS.put("brightnessLeft",50);SIDE_DEFAULTS.put("effectLeft","None");
+        SIDE_DEFAULTS.put("swapSides",false);
+    }
+    /** One LED bar. Settings keys carry the suffix ("" for right, "Left" for left). */
+    private static final class Side {
+        final String light,suffix;final int index;
+        long effectStart;int[] last;boolean lastPower;
+        // Non-null while the selected effect is one of the 19 ported ones --
+        // LedMath.frame handles the original five. Rebuilt by restart().
+        LedRichEffect rich;
+        Side(String light,String suffix,int index){this.light=light;this.suffix=suffix;this.index=index;}
+        String key(String base){return base+suffix;}
+    }
+    private final Side[] sides={new Side("panel","",0),new Side("panel_left","Left",1)};
     private long testStart=-1;
     private boolean loaded;
-    private int[] lastFrame;
-    private boolean lastPower;
-    // Non-null while the selected effect is one of the 19 ported ones —
-    // LedMath.frame handles the original five, which need no per-instance
-    // state. A fresh instance every time configure() runs (same as every
-    // other per-effect timing field here), so restarting an effect always
-    // starts from clean state.
-    private LedRichEffect richEffect;
 
     public void start(PluginHost host, Map<String,Object> settings) {
         this.host=host;
@@ -67,14 +83,20 @@ public final class RockchipLedPlugin implements KioskPlugin {
     }
     public void configure(Map<String,Object> values) {
         Map<String,Object> copy=new HashMap<>(values);
+        for(Map.Entry<String,Object> entry:SIDE_DEFAULTS.entrySet())copy.putIfAbsent(entry.getKey(),entry.getValue());
         submit(() -> {
             boolean recheck=transport==null || !Objects.equals(settings.get("simulation"),copy.get("simulation")) || !Objects.equals(settings.get("allowRoot"),copy.get("allowRoot"));
-            settings=copy; effectStart=System.nanoTime();testStart=-1;lastFrame=null;
-            Supplier<LedRichEffect> supplier=LedEffectRegistry.RICH_EFFECTS.get(copy.get("effect"));
-            richEffect=supplier!=null?supplier.get():null;
+            settings=copy;testStart=-1;
+            for(Side side:sides)restart(side);
             if (recheck) detect();
             frame();publish();
         });
+    }
+    /** Restarts a side's effect clock and rebuilds its stateful effect for the current settings. */
+    private void restart(Side side) {
+        side.effectStart=System.nanoTime();side.last=null;
+        Supplier<LedRichEffect> supplier=LedEffectRegistry.RICH_EFFECTS.get(settings.get(side.key("effect")));
+        side.rich=supplier!=null?supplier.get():null;
     }
     public void execute(String command,Map<String,Object> args) {
         submit(() -> {
@@ -82,29 +104,32 @@ public final class RockchipLedPlugin implements KioskPlugin {
                 case "detect":detect();frame();publish();break;
                 case "test":
                     if (transport==null) {status("No LED access. Check hardware access first.",true);return;}
-                    testStart=System.nanoTime();lastFrame=null;break;
-                case "off":settings.put("power",false);testStart=-1;frame();publish();host.saveSettings(settings);break;
+                    testStart=System.nanoTime();for(Side side:sides)side.last=null;break;
+                case "off":for(Side side:sides)settings.put(side.key("power"),false);testStart=-1;frame();publish();host.saveSettings(settings);break;
                 default:throw new IllegalArgumentException("Unknown LED command");
             }
         });
     }
     public void onEvent(String event,Map<String,Object> payload) {
-        if (!"light.panel".equals(event)) return;
+        Side found=null;
+        for(Side candidate:sides)if(("light."+candidate.light).equals(event))found=candidate;
+        if(found==null)return;
+        final Side side=found;
         Map<String,Object> values=new HashMap<>(payload);
         submit(() -> {
             if (transport==null) return;
-            if (values.get("on") instanceof Boolean) settings.put("power",values.get("on"));
-            if (values.containsKey("brightness")) settings.put("brightness",Math.round(unit(values.get("brightness"))*100));
-            int[] rgb=LedMath.color((String)settings.get("color"));
+            if (values.get("on") instanceof Boolean) settings.put(side.key("power"),values.get("on"));
+            if (values.containsKey("brightness")) settings.put(side.key("brightness"),Math.round(unit(values.get("brightness"))*100));
+            int[] rgb=LedMath.color((String)settings.get(side.key("color")));
             String[] keys={"red","green","blue"};
             for(int i=0;i<3;i++) if(values.containsKey(keys[i])) rgb[i]=(int)Math.round(unit(values.get(keys[i]))*255);
-            settings.put("color",String.format(Locale.ROOT,"#%02X%02X%02X",rgb[0],rgb[1],rgb[2]));
+            settings.put(side.key("color"),String.format(Locale.ROOT,"#%02X%02X%02X",rgb[0],rgb[1],rgb[2]));
             if(values.containsKey("effect")) {
                 String effect=String.valueOf(values.get("effect"));
                 if(!Arrays.asList(EFFECTS).contains(effect)) throw new IllegalArgumentException("Unknown LED effect");
-                settings.put("effect",effect);
+                settings.put(side.key("effect"),effect);
             }
-            testStart=-1;effectStart=System.nanoTime();lastFrame=null;
+            testStart=-1;restart(side);
             frame();publish();host.saveSettings(settings);
         });
     }
@@ -179,7 +204,7 @@ public final class RockchipLedPlugin implements KioskPlugin {
         return number;
     }
     private void detect() throws Exception {
-        closeTransport();host.removeLight("panel");
+        closeTransport();removeLights();
         if(Boolean.TRUE.equals(settings.get("simulation"))) transport=new LedTransport.Simulation();
         else {
             if(!loaded){NativeLed.load(host.nativeLibraryPath("rockchip_led"));loaded=true;}
@@ -198,34 +223,48 @@ public final class RockchipLedPlugin implements KioskPlugin {
                 catch(Exception e){root.close();throw e;}
             } else {status(error(result)+" Enable root fallback only if this panel is rooted.",true);return;}
         }
-        lastFrame=null;lastPower=true;status(transport.label(),false);
+        for(Side side:sides){side.last=null;side.lastPower=true;}status(transport.label(),false);
     }
     private void frame() throws Exception {
         LedTransport device=transport;
         if(device==null || !alive.get() || settings.isEmpty())return;
-        long elapsed=TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-effectStart);
-        boolean power=Boolean.TRUE.equals(settings.get("power"));
-        int[] baseColor=LedMath.color((String)settings.get("color"));
-        int[] rgb=richEffect!=null
-            ?richEffect.tick(elapsed,baseColor)
-            :LedMath.frame((String)settings.get("effect"),elapsed,((Number)settings.get("period")).doubleValue(),baseColor);
+        int testStep=-1;
         if(testStart>=0) {
             long test=TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-testStart);
-            if(test<3000){power=true;rgb=new int[3];rgb[(int)(test/1000)]=255;}
-            else{testStart=-1;lastFrame=null;}
+            if(test<3000)testStep=(int)(test/1000);
+            else{testStart=-1;for(Side side:sides)side.last=null;}
         }
-        if(!power){if(lastPower){check(device.off());lastPower=false;}return;}
-        int limit=((Number)settings.get("maxDrive")).intValue();double brightness=((Number)settings.get("brightness")).doubleValue();
-        int[] drive={LedMath.scale(rgb[0],brightness,limit),LedMath.scale(rgb[1],brightness,limit),LedMath.scale(rgb[2],brightness,limit)};
-        if(!lastPower||!Arrays.equals(drive,lastFrame)){check(device.write(drive[0],drive[1],drive[2]));lastFrame=drive;lastPower=true;}
+        for(Side side:sides)drive(device,side,testStep);
     }
-    private void publish(){
-        if(transport==null||!Boolean.TRUE.equals(settings.get("exposeLight"))){host.removeLight("panel");return;}
-        int[] rgb=LedMath.color((String)settings.get("color"));Map<String,Object> state=new HashMap<>();
-        state.put("on",settings.get("power"));state.put("brightness",((Number)settings.get("brightness")).doubleValue()/100);
-        state.put("red",rgb[0]/255.0);state.put("green",rgb[1]/255.0);state.put("blue",rgb[2]/255.0);state.put("effect",settings.get("effect"));
-        host.publishLight("panel",Boolean.TRUE.equals(settings.get("simulation"))?"Rockchip LED (simulation)":"Rockchip LED",ENTITY_EFFECTS,state);
+    /** The hardware bar this side talks to; "Swap left and right" exchanges them. */
+    private int bar(Side side){return Boolean.TRUE.equals(settings.get("swapSides"))?1-side.index:side.index;}
+    private void drive(LedTransport device,Side side,int testStep) throws Exception {
+        long elapsed=TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-side.effectStart);
+        boolean power=Boolean.TRUE.equals(settings.get(side.key("power")));
+        int[] baseColor=LedMath.color((String)settings.get(side.key("color")));
+        int[] rgb=side.rich!=null
+            ?side.rich.tick(elapsed,baseColor)
+            :LedMath.frame((String)settings.get(side.key("effect")),elapsed,((Number)settings.get("period")).doubleValue(),baseColor);
+        if(testStep>=0){power=true;rgb=new int[3];rgb[testStep]=255;}
+        if(!power){if(side.lastPower){check(device.set(bar(side),-1,0));side.lastPower=false;side.last=null;}return;}
+        int limit=Math.min(MAX_LEVEL,((Number)settings.get("maxDrive")).intValue());
+        double brightness=((Number)settings.get(side.key("brightness"))).doubleValue();
+        int channel=LedMath.channel(rgb);
+        int level=channel<0?0:LedMath.scale(Math.max(rgb[0],Math.max(rgb[1],rgb[2])),brightness,limit);
+        if(level==0)channel=-1;
+        int[] drive={channel,level};
+        if(!side.lastPower||!Arrays.equals(drive,side.last)){check(device.set(bar(side),channel,level));side.last=drive;side.lastPower=true;}
     }
+    private void publish(){for(Side side:sides)publish(side);}
+    private void publish(Side side){
+        if(transport==null||!Boolean.TRUE.equals(settings.get("exposeLight"))){host.removeLight(side.light);return;}
+        int[] rgb=LedMath.color((String)settings.get(side.key("color")));Map<String,Object> state=new HashMap<>();
+        state.put("on",settings.get(side.key("power")));state.put("brightness",((Number)settings.get(side.key("brightness"))).doubleValue()/100);
+        state.put("red",rgb[0]/255.0);state.put("green",rgb[1]/255.0);state.put("blue",rgb[2]/255.0);state.put("effect",settings.get(side.key("effect")));
+        String name="Rockchip LED "+(side.index==0?"right":"left");
+        host.publishLight(side.light,Boolean.TRUE.equals(settings.get("simulation"))?name+" (simulation)":name,ENTITY_EFFECTS,state);
+    }
+    private void removeLights(){for(Side side:sides)host.removeLight(side.light);}
     private void status(String text,boolean error){if(alive.get())host.status(text,error);}
     private static String error(int code){return "LED access failed (errno "+(-code)+"). "+(code==-13||code==-1?"The device permissions or SELinux policy denied access.":"Check the panel driver and its /dev/ledjni node.");}
     private static void check(int code){if(code!=0)throw new IllegalStateException(error(code));}
@@ -233,7 +272,7 @@ public final class RockchipLedPlugin implements KioskPlugin {
     private void safe(Task task){
         if(!alive.get())return;
         try{task.run();}catch(InterruptedException e){Thread.currentThread().interrupt();}
-        catch(Throwable e){closeTransport();if(alive.get()){host.removeLight("panel");status(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage(),true);}}
+        catch(Throwable e){closeTransport();if(alive.get()){removeLights();status(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage(),true);}}
     }
     private void submit(Task task){if(alive.get())worker.execute(() -> safe(task));}
     private void closeTransport(){LedTransport old=transport;transport=null;if(old!=null){try{old.off();}catch(Exception ignored){}old.close();}}

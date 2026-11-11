@@ -1,17 +1,43 @@
 // SPDX-License-Identifier: Apache-2.0
 // Interoperability facts: davidcoulson/kiosk-satellite issue #494 and
-// maxlyth/ha-paneld's vendor protocol research. No vendor code is included.
+// maxlyth/ha-paneld's vendor protocol research, plus the ioctl map observed in
+// the Allnet 13" meeting-room tablet's LED demo app (libjnielc.so, MainActivity).
+// No vendor code is included.
+//
+// Dual-bar protocol (Allnet 174716): every LED bar has seven colour channels.
+// Bar 0 uses ioctl requests 0xa1..0xa7, bar 1 uses 0xb1..0xb7. The argument is
+// a level from 0 to 15. The vendor demo selects ONE colour per bar and writes
+// 0 to the other six, so this code does the same: zero the others first, then
+// write the selected channel last.
+//   channel 0 red, 1 green, 2 blue, 3 cyan, 4 magenta, 5 yellow, 6 white
+// Request 0x99 switches the LED driver off.
 #include <jni.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+#define LED_BARS 2
+#define LED_CHANNELS 7
+#define LED_MAX_LEVEL 15
+
+static const unsigned long BAR_BASE[LED_BARS] = {0xa1, 0xb1};
+
 static int open_led(void) {
     int fd;
     do { fd = open("/dev/ledjni", O_RDWR | O_CLOEXEC | O_NOCTTY); }
     while (fd < 0 && errno == EINTR);
     return fd;
+}
+
+// channel -1 switches every colour of the bar off.
+static int set_bar(int fd, int bar, int channel, int level) {
+    for (int i = 0; i < LED_CHANNELS; ++i) {
+        if (i == channel) continue;
+        if (ioctl(fd, BAR_BASE[bar] + (unsigned long)i, 0UL) < 0) return -errno;
+    }
+    if (channel >= 0 && ioctl(fd, BAR_BASE[bar] + (unsigned long)channel, (unsigned long)level) < 0) return -errno;
+    return 0;
 }
 
 JNIEXPORT jint JNICALL
@@ -24,17 +50,12 @@ Java_me_jxl_kiosk_plugins_rockchip_NativeLed_probe(JNIEnv *env, jclass cls) {
 }
 
 JNIEXPORT jint JNICALL
-Java_me_jxl_kiosk_plugins_rockchip_NativeLed_write(JNIEnv *env, jclass cls, jint red, jint green, jint blue) {
+Java_me_jxl_kiosk_plugins_rockchip_NativeLed_set(JNIEnv *env, jclass cls, jint bar, jint channel, jint level) {
     (void)env; (void)cls;
-    if (red < 0 || red > 255 || green < 0 || green > 255 || blue < 0 || blue > 255) return -EINVAL;
+    if (bar < 0 || bar >= LED_BARS || channel < -1 || channel >= LED_CHANNELS || level < 0 || level > LED_MAX_LEVEL) return -EINVAL;
     int fd = open_led();
     if (fd < 0) return -errno;
-    const unsigned long requests[] = {0xa1, 0xa2, 0xa3};
-    const unsigned long values[] = {(unsigned long)red, (unsigned long)green, (unsigned long)blue};
-    int error = 0;
-    for (int i = 0; i < 3; ++i) {
-        if (ioctl(fd, requests[i], values[i]) < 0) { error = -errno; break; }
-    }
+    int error = set_bar(fd, (int)bar, (int)channel, (int)level);
     if (error) ioctl(fd, 0x99, 0UL);
     close(fd);
     return error;
@@ -46,6 +67,7 @@ Java_me_jxl_kiosk_plugins_rockchip_NativeLed_off(JNIEnv *env, jclass cls) {
     int fd = open_led();
     if (fd < 0) return -errno;
     int result = ioctl(fd, 0x99, 0UL) < 0 ? -errno : 0;
+    for (int bar = 0; bar < LED_BARS && result == 0; ++bar) result = set_bar(fd, bar, -1, 0);
     close(fd);
     return result;
 }

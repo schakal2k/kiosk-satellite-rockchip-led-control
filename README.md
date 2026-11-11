@@ -6,6 +6,15 @@ Rockchip chipset branding alone does not establish compatibility. This plugin im
 
 ![Plugin controls in simulation on a test kiosk](docs/plugin-controls.png)
 
+## Dual LED bars (Allnet 174716 variant)
+
+This variant drives panels that have **two** LED bars, such as the Allnet 13" meeting-room tablet (RK3288, article 174716). The protocol was read from the vendor LED demo app of that tablet; see [docs/allnet-dual-led.md](docs/allnet-dual-led.md).
+
+- Each bar has its own power, color, brightness and effect settings, and its own Home Assistant light (**Rockchip LED right** and **Rockchip LED left**).
+- A bar shows **one of seven colors at a time** (red, green, blue, cyan, magenta, yellow, white) with 16 brightness levels. Any color you pick is snapped to the nearest of the seven, and effects such as Rainbow step through them.
+- **Swap left and right** exchanges the two bars if the sides are the wrong way round on your panel.
+- This variant is untested on hardware by its author. The left/right assignment in particular is an assumption.
+
 ## Requirements
 
 - Kiosk Satellite with **plugin SDK 1 support**. All plugin features use SDK 1, the first public API.
@@ -37,11 +46,11 @@ Normal installation uses the repository URL and GitHub Actions release assets. M
 | Effect | None, Pulse, Blink, Rainbow, Candle, Random, Sunrise/Sunset, Moonlight Glow, Lightning Storm, Wake-Up Alarm, Candle Flicker, Fairytwinkle, Fireworks Burst, Beacon Pulse, Heartbeat Pulse, Soft Glow, Rolling Fog (Pronounced), Pacifica (Calm Lagoon/Storm/Deep Current), Aurora (Solar Storm/Pastel Dream/Red Sky), Bubbles or Disco Sparkle — the last 19 ported from [davidcoulson/kiosk-satellite](https://github.com/davidcoulson/kiosk-satellite) |
 | Effect period | Controls the cycle length for Pulse, Blink, Rainbow and Random. Candle uses its own flicker timing |
 | Expose to Home Assistant | Publishes an RGB light only while access is available |
-| Maximum channel drive | Maps a full channel to 1 through 255. Defaults to 15 pending calibration on the actual panel |
+| Maximum channel drive | Highest level the hardware accepts per color, 1 through 15. Lower it to cap the brightness |
 | Allow root fallback | Allows the fixed LED helper through `su` when direct access is denied |
 | Simulation mode | Exercises controls and effects without touching hardware. The HA light name explicitly identifies simulation |
 
-The 0 to 15 default follows the conservative range in the original research. It is not a universal calibration or a hardware safety guarantee. Different panels can respond differently. See [hardware verification](docs/hardware-verification.md) before raising it.
+The hardware accepts levels 0 to 15 per color, so 15 is also the maximum. See [hardware verification](docs/hardware-verification.md).
 
 ## Home Assistant
 

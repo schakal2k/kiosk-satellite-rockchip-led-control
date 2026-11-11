@@ -12,6 +12,23 @@ final class LedMath {
             throw new IllegalArgumentException("Invalid LED channel range");
         return (int)Math.round(channel * brightness * limit / 25500.0);
     }
+    /**
+     * The LED bars show one of seven colours at a time. Maps an RGB triple to that
+     * palette: 0 red, 1 green, 2 blue, 3 cyan, 4 magenta, 5 yellow, 6 white, -1 for black.
+     * A channel counts as on when it is at least half of the brightest channel.
+     */
+    static int channel(int[] rgb) {
+        int max=Math.max(rgb[0],Math.max(rgb[1],rgb[2]));
+        if(max<=0)return -1;
+        boolean r=rgb[0]*2>=max,g=rgb[1]*2>=max,b=rgb[2]*2>=max;
+        if(r&&g&&b)return 6;
+        if(r&&g)return 5;
+        if(r&&b)return 4;
+        if(g&&b)return 3;
+        if(r)return 0;
+        if(g)return 1;
+        return 2;
+    }
     static int[] hue(double hue) {
         double h = (hue-Math.floor(hue))*6;
         double x = 1-Math.abs(h%2-1);

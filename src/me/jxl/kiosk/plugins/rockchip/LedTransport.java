@@ -7,21 +7,21 @@ import java.util.concurrent.*;
 
 interface LedTransport extends AutoCloseable {
     int probe() throws Exception;
-    int write(int r, int g, int b) throws Exception;
+    int set(int bar, int channel, int level) throws Exception;
     int off() throws Exception;
     String label();
     void close();
 
     final class Direct implements LedTransport {
         public int probe() { return NativeLed.probe(); }
-        public int write(int r, int g, int b) { return NativeLed.write(r,g,b); }
+        public int set(int bar, int channel, int level) { return NativeLed.set(bar,channel,level); }
         public int off() { return NativeLed.off(); }
         public String label() { return "Direct device access"; }
         public void close() {}
     }
     final class Simulation implements LedTransport {
         public int probe() { return 0; }
-        public int write(int r, int g, int b) { return 0; }
+        public int set(int bar, int channel, int level) { return 0; }
         public int off() { return 0; }
         public String label() { return "Simulation mode. No hardware is being changed."; }
         public void close() {}
@@ -60,7 +60,7 @@ interface LedTransport extends AutoCloseable {
             return reply;
         }
         public int probe() throws Exception { return request("probe"); }
-        public int write(int r,int g,int b) throws Exception { return request("rgb " + r + " " + g + " " + b); }
+        public int set(int bar,int channel,int level) throws Exception { return request("set " + bar + " " + channel + " " + level); }
         public int off() throws Exception { return request("off"); }
         public String label() { return "Root helper access"; }
         public void close() {

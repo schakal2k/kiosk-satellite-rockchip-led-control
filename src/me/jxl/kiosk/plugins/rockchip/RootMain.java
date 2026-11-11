@@ -18,10 +18,10 @@ public final class RootMain {
                 int result = -22;
                 if ("probe".equals(line)) result = NativeLed.probe();
                 else if ("off".equals(line)) result = NativeLed.off();
-                else if (line.startsWith("rgb ") && line.length() < 32) {
+                else if (line.startsWith("set ") && line.length() < 32) {
                     String[] values = line.split(" ");
                     if (values.length == 4) {
-                        try { result = NativeLed.write(Integer.parseInt(values[1]), Integer.parseInt(values[2]), Integer.parseInt(values[3])); }
+                        try { result = NativeLed.set(Integer.parseInt(values[1]), Integer.parseInt(values[2]), Integer.parseInt(values[3])); }
                         catch (NumberFormatException ignored) { result = -22; }
                     }
                 }

@@ -3,10 +3,10 @@
   "apiVersion": 1,
   "id": "rockchip-led-control",
   "name": "Rockchip LED Control",
-  "version": "0.2.5-20261019.1",
+  "version": "0.3.0-dual.1",
   "minAndroidSdk": 24,
   "entryClass": "me.jxl.kiosk.plugins.rockchip.RockchipLedPlugin",
-  "description": "Control the RGB status LED on compatible panels with a /dev/ledjni driver. Set its color, brightness and effect here or through Home Assistant.",
+  "description": "Control the two RGB LED bars (left and right) of panels with a /dev/ledjni driver, such as the Allnet 13\" meeting-room tablet. Each bar has its own colour, brightness and effect, here or as a separate light in Home Assistant. Each bar shows one of seven colours at a time.",
   "icon": "icon.png",
   "author": "David Coulson",
   "license": "Apache-2.0",
@@ -18,32 +18,32 @@
     {
       "key": "power",
       "type": "boolean",
-      "title": "LED on",
+      "title": "Right LED on",
       "default": false,
-      "group": "LED"
+      "group": "Right LED"
     },
     {
       "key": "color",
       "type": "color",
-      "title": "Color",
+      "title": "Right color",
       "default": "#00A8FF",
-      "group": "LED"
+      "group": "Right LED"
     },
     {
       "key": "brightness",
       "type": "number",
-      "title": "Brightness",
+      "title": "Right brightness",
       "min": 0,
       "max": 100,
       "step": 1,
       "default": 50,
       "unit": "%",
-      "group": "LED"
+      "group": "Right LED"
     },
     {
       "key": "effect",
       "type": "select",
-      "title": "Effect",
+      "title": "Right effect",
       "options": [
         "None",
         "Pulse",
@@ -72,34 +72,101 @@
         "Disco Sparkle"
       ],
       "default": "None",
-      "group": "LED"
+      "group": "Right LED"
+    },
+    {
+      "key": "powerLeft",
+      "type": "boolean",
+      "title": "Left LED on",
+      "default": false,
+      "group": "Left LED"
+    },
+    {
+      "key": "colorLeft",
+      "type": "color",
+      "title": "Left color",
+      "default": "#00A8FF",
+      "group": "Left LED"
+    },
+    {
+      "key": "brightnessLeft",
+      "type": "number",
+      "title": "Left brightness",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "default": 50,
+      "unit": "%",
+      "group": "Left LED"
+    },
+    {
+      "key": "effectLeft",
+      "type": "select",
+      "title": "Left effect",
+      "options": [
+        "None",
+        "Pulse",
+        "Blink",
+        "Rainbow",
+        "Candle",
+        "Random",
+        "Sunrise/Sunset",
+        "Moonlight Glow",
+        "Lightning Storm",
+        "Wake-Up Alarm",
+        "Candle Flicker",
+        "Fairytwinkle",
+        "Fireworks Burst",
+        "Beacon Pulse",
+        "Heartbeat Pulse",
+        "Soft Glow",
+        "Rolling Fog (Pronounced)",
+        "Pacifica (Calm Lagoon)",
+        "Pacifica (Storm)",
+        "Pacifica (Deep Current)",
+        "Aurora (Solar Storm)",
+        "Aurora (Pastel Dream)",
+        "Aurora (Red Sky)",
+        "Bubbles",
+        "Disco Sparkle"
+      ],
+      "default": "None",
+      "group": "Left LED"
     },
     {
       "key": "period",
       "type": "number",
-      "title": "Effect period",
+      "title": "Effect period (both LEDs)",
       "min": 500,
       "max": 10000,
       "step": 100,
       "default": 2000,
       "unit": "ms",
-      "group": "LED"
+      "group": "Effects"
     },
     {
       "key": "exposeLight",
       "type": "boolean",
       "title": "Expose to Home Assistant",
-      "description": "Adds an RGB light to the kiosk ESPHome device when the LED is available.",
+      "description": "Adds one RGB light per LED bar to the kiosk ESPHome device when the LED is available.",
       "default": true,
       "group": "Home Assistant"
+    },
+    {
+      "key": "swapSides",
+      "type": "boolean",
+      "title": "Swap left and right",
+      "description": "Use this if the physical left and right LED bars are the wrong way round.",
+      "default": false,
+      "group": "Hardware"
     },
     {
       "key": "maxDrive",
       "type": "number",
       "title": "Maximum channel drive",
-      "description": "Starts at 15 to match the conservative range reported by the original hardware research. Calibrate higher values on your panel.",
+      "description": "The hardware accepts levels 0 to 15 per color. Lower this to cap the maximum brightness.",
       "min": 1,
-      "max": 255,
+      "max": 15,
       "step": 1,
       "default": 15,
       "group": "Hardware"
